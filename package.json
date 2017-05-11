@@ -1,7 +1,7 @@
 {
-  "name": "deepstream.io-cache-and-storage-connector-template",
+  "name": "deepstream.io-cache-and-storage-connector-couchbase",
   "version": "1.0.1",
-  "description": "A template that can be forked to create new cache and storage connectors for deepstream.io",
+  "description": "A Couchbase cache and storage connector(s) for Deepstream.io",
   "main": "src/connector.js",
   "scripts": {
     "test": "mocha",
@@ -11,12 +11,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/deepstreamIO/deepstream.io-cache-and-storage-connector-template.git"
+    "url": "https://github.com/Mantic/deepstream.io-cache-and-storage-connector-couchbase.git"
   },
-  "author": "deepstreamHub GmbH",
+  "author": "<Mikey.whitaker@gmail.com> Michael Whitaker",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/deepstreamIO/deepstream.io-cache-and-storage-connector-template/issues"
+    "url": "https://github.com/deepstreamIO/deepstream.io-cache-and-storage-connector-couchbase/issues"
   },
   "homepage": "http://deepstream.io",
   "dependencies": {},

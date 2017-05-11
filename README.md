@@ -1,5 +1,5 @@
-# deepstream.io-cache-and-storage-connector-template
-A template that can be forked to create new cache and storage connectors
+# deepstream.io-cache-and-storage-connector-couchbase
+A Couchbase cache and storage connector(s) for Deepstream.io
 
 ```yaml
 plugins:
