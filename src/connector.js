@@ -1,127 +1,137 @@
 'use strict'
 
-const events = require( 'events' )
-const util = require( 'util' )
-const pckg = require( '../package.json' )
+const events = require('events')
+
+const couchbase = require('couchbase');
+var couchnode = require('couchnode');
+
+
+const pckg = require('../package.json')
 
 /**
- * A template that can be forked to create cache or storage connectors
- * for [deepstream](http://deepstream.io)
+ * This class connects deepstream.io to a memcached cache, using the
+ * memcached library (https://www.npmjs.com/package/memcached).
  *
- * Cache connectors are classes that connect deepstream to an in-memory cache, e.g. Redis, Memcached,
- * IronCache or Amazon's elastic cache
+ * Please consult https://www.npmjs.com/package/memcached for details
+ * on the serverLocation and memcachedOptions setting
  *
- * Storage connectors are classes that connect deepstream to a database, e.g. MongoDB, CouchDB, Cassandra or
- * Amazon's DynamoDB. They can also be used with relational databases, but deepstream's data-structures (blocks
- * of JSON, identified by a key) lends itself very well to object/document based databases.
+ * lifetime is the default lifetime for objects in seconds (defaults to 1000)
  *
- * Whats this class used for?
+ * @param {Object} options { serverLocation: <mixed>, [lifetime]: <Number>, [memcachedOptions]: <Object> }
  *
- * Both cache and storage connectors expose the same interface and offer similar functionality,
- * yet their role is a little bit different.
- *
- * Deepstream servers don't hold any data themselves. This allows the individual servers to remain
- * stateless and to go down / fail over without causing any data-loss, but it also allows for
- * the data to be distributed across multiple nodes.
- *
- * Whenever deepstream has to store something, its written to the cache in a blocking fashion, but written to
- * storage in a non blocking way. (Well, its NodeJS, so it's not really 'blocking', but the next callback for
- * this particular update won't be processed until the cache operation is complete)
- *
- * Similarly, whenever an entry needs to be retrieved, deepstream looks for it in the cache first and in storage
- * second. This means that the cache needs to be very fast - and fortunately most caches are. Both Redis and Memcached
- * have proven to be able to return queries within the same millisecond.
- *
- * So why have this distinction between cache and storage at all? Because they complement each other quite well:
- *
- * - Caches need to make a relatively small amount of data accessible at very high speeds. They achieve that by storing
- *   the data in memory, rather than on disk (although some, e.g. Redis, write to disk as well). This means that
- *   all data is lost when the process exists. Caches also usually don't offer support for elaborate querying.
- *
- * - Databases (storage) offer long-term storage of larger amounts of data and allow for more elaborate ways of querying.
- *   (full-text search, SQL etc.)
- *
- * Some considerations when implementing a cache/storage connector
- *
- * - this.isReady starts as false. Once the connection to the cache / storage is established, emit a 'ready' event and set
- *   it to true
- *
- * - Whenever a generic error occurs (e.g. an error that's not directly related to a get, set or delete operation, raise
- *   an error event and send the error message as a parameter, e.g. this.emit( 'error', 'connection lost' ) )
- *
- * - whenever an error occurs as part of a get, set or delete operation, pass it to the callback as the first argument,
- *   otherwise pass null
- *
- * - values for set() will be serializable JavaScript objects and are expected to be returned by get as such. It's
- *   therefor up to this class to handle serialisation / de-serialisation, e.g. as JSON or message-pack. Some
- *   systems (e.g. MongoDB) however can also handle raw JSON directly
+ * @constructor
  */
 class Connector extends events.EventEmitter {
-
-  /* @param {Object} options Any options the connector needs to connect to the cache/db and to configure it.
-  *
-  * @constructor
-  */
-  constructor( options ) {
-    super()
+  constructor(options) {
+    super(options)
     this.isReady = false
     this.name = pckg.name
     this.version = pckg.version
+    this._options = options
+    this._options.lifetime = options.lifetime || 1000
+
+    if (!this._options.host) {
+      throw new Error('Missing parameter \'host\' for couchbase connector')
+    }
+
+    var me = this;
+
+    this._cluster = new couchbase.Cluster(this._options.host);
+    this._bucket = couchnode.wrap(this._cluster.openBucket(this._options.bucketname || 'deepstream'), this._options.password, function(err) {
+        console.log('BUCKET CALLBACK: ', err);
+        if(err)
+          me.emit('error');
+    });
+
+    process.nextTick(this._ready.bind(this))
   }
 
   /**
-  * Writes a value to the connector.
-  *
-  * @param {String}   key
-  * @param {Object}   value
-  * @param {Function} callback Should be called with null for successful set operations or with an error message string
-  *
-  * @private
-  * @returns {void}
-  */
-  set( key, value, callback ) {
-
-  }
-
-  /**
-  * Retrieves a value from the connector.
-  *
-  * @param {String}   key
-  * @param {Function} callback Will be called with null and the stored object
-  *                            for successful operations or with an error message string
-  *
-  * @returns {void}
-  */
-  get( key, callback ) {
-
-  }
-
-  /**
-  * Deletes an entry from the connector.
-  *
-  * @param   {String}   key
-  * @param   {Function} callback Will be called with null for successful deletions or with
-  *                     an error message string
-  *
-  * @returns {void}
-  */
-  delete( key, callback ) {
-
-  }
-
-  /**
-   * Gracefully close the connector and any dependencies.
+   * Writes a value to the cache.
    *
-   * Called when deepstream.close() is invoked.
-   * If this method is defined, it must emit 'close' event to notify deepstream of clean closure.
+   * @param {String}   key
+   * @param {Object}   value
+   * @param {Function} callback Should be called with null for successful set operations or with an error message string
    *
-   * (optional)
-   *
-   * @public
+   * @private
    * @returns {void}
    */
-  close() {
+  set(key, value, callback) {
+    var tuples = {};
+    tuples[key] = value;
 
+    this._bucket.upsert(tuples, this._onResponse.bind(this, callback));
+    //this._client.set(key, value, this._options.lifetime, this._onResponse.bind(this, callback))
+  }
+
+  /**
+   * Retrieves a value from the cache
+   *
+   * @param {String}   key
+   * @param {Function} callback Will be called with null and the stored object
+   *                            for successful operations or with an error message string
+   *
+   * @private
+   * @returns {void}
+   */
+  get(key, callback) {
+
+    this._bucket.get(key, (err, val) => {
+      if(err)
+        return callback(err);
+
+      if(val === undefined || val[key] === undefined)
+        return callback(null, null);
+
+      callback(null, val[key]);
+    });
+
+/*    this._client.get(key, (err, value) => {
+      if (err) {
+        callback(err)
+        return
+      }
+
+      if (value === undefined) {
+        callback(null, null)
+        return
+      }
+      callback(null, value)
+    })
+*/
+  }
+
+  /**
+   * Deletes an entry from the cache.
+   *
+   * @param   {String}   key
+   * @param   {Function} callback Will be called with null for successful deletions or with
+   *                     an error message string
+   *
+   * @private
+   * @returns {void}
+   */
+  delete(key, callback) {
+    this._bucket.remove(key, (err, cas, misses) => {
+      if(err)
+        return callback(err);
+
+      callback(null);
+    });
+//    this._client.del(key, this._onResponse.bind(this, callback))
+  }
+
+  _ready() {
+    this.isReady = true
+    this.emit('ready')
+  }
+
+  _onResponse(callback, error) {
+    if (error) {
+      callback(error)
+    } else {
+      callback(null)
+    }
   }
 }
 

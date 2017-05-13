@@ -1,5 +1,5 @@
-# deepstream.io-cache-and-storage-connector-couchbase
-A Couchbase cache and storage connector(s) for Deepstream.io
+# deepstream.io-storage-couchbase
+A Couchbase storage connector for Deepstream.io
 
 ```yaml
 plugins:
