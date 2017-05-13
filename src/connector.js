@@ -5,15 +5,11 @@ const events = require('events')
 const couchbase = require('couchbase');
 var couchnode = require('couchnode');
 
-
 const pckg = require('../package.json')
 
 /**
- * This class connects deepstream.io to a memcached cache, using the
- * memcached library (https://www.npmjs.com/package/memcached).
- *
- * Please consult https://www.npmjs.com/package/memcached for details
- * on the serverLocation and memcachedOptions setting
+ * This class connects deepstream.io to a couchbase cache, using the
+ * couchbase + couchnode libraries.
  *
  * lifetime is the default lifetime for objects in seconds (defaults to 1000)
  *
@@ -36,14 +32,20 @@ class Connector extends events.EventEmitter {
 
     var me = this;
 
+    console.log('couchbase options: ', this._options);
+
     this._cluster = new couchbase.Cluster(this._options.host);
-    this._bucket = couchnode.wrap(this._cluster.openBucket(this._options.bucketname || 'deepstream'), this._options.password, function(err) {
-        console.log('BUCKET CALLBACK: ', err);
-        if(err)
-          me.emit('error');
+
+    this._bucket = couchnode.wrap(this._cluster.openBucket(this._options.bucketname || 'deepstream', this._options.password));
+    this._bucket.bucket.on('error', err => {
+      // console.log('Error connecting to bucket: ', me._bucket.bucket);
+      me.emit('error');
     });
 
-    process.nextTick(this._ready.bind(this))
+    this._bucket.bucket.on('connect', () => {
+      // console.log('Connected to the bucket!');
+      me._ready();
+    });
   }
 
   /**
