@@ -36,7 +36,8 @@ class Connector extends events.EventEmitter {
 
     this._cluster = new couchbase.Cluster(this._options.host);
     this._bucket = this._cluster.openBucket(this._options.bucketname || 'deepstream', this._options.password);
-
+    this._ready();
+    
     // function connectBucket() {    
     //   me._bucket.bucket.on('error', err => {
     //     // console.log('Error connecting to bucket: ', me._bucket.bucket);
