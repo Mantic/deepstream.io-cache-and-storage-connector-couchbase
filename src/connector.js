@@ -1,19 +1,14 @@
 'use strict'
 
 const events = require('events')
-
 const couchbase = require('couchbase');
-var couchnode = require('couchnode');
-
 const pckg = require('../package.json')
 
 /**
- * This class connects deepstream.io to a couchbase cache, using the
- * couchbase + couchnode libraries.
+ * This class connects deepstream.io to a couchbase storage/db, using the
+ * couchbase library.
  *
- * lifetime is the default lifetime for objects in seconds (defaults to 1000)
- *
- * @param {Object} options { serverLocation: <mixed>, [lifetime]: <Number>, [memcachedOptions]: <Object> }
+ * @param {Object} options { serverLocation: <mixed>, [memcachedOptions]: <Object> }
  *
  * @constructor
  */
@@ -24,20 +19,31 @@ class Connector extends events.EventEmitter {
     this.name = pckg.name
     this.version = pckg.version
     this._options = options
-    this._options.lifetime = options.lifetime || 1000
 
     if (!this._options.host) {
-      throw new Error('Missing parameter \'host\' for couchbase connector')
+      throw new Error('Missing parameter \'host\' for couchbase connector.')
     }
 
     var me = this;
 
-    console.log('couchbase options: ', this._options);
+    // console.log('couchbase options: ', this._options);
 
     this._cluster = new couchbase.Cluster(this._options.host);
-    this._bucket = this._cluster.openBucket(this._options.bucketname || 'deepstream', this._options.password);
-    this._ready();
-    
+    this._bucket = this._cluster.openBucket(this._options.bucketname || 'deepstream', this._options.password, err => {
+      console.log('Connected? ', err);
+    });
+
+    this._bucket.on('connect', () => {
+      console.log('ready?!');
+      process.nextTick(this._ready.bind(this))
+    });
+
+    this._bucket.on('error', err => {
+      console.log('ERROR!', err);
+    });
+
+
+
     // function connectBucket() {    
     //   me._bucket.bucket.on('error', err => {
     //     // console.log('Error connecting to bucket: ', me._bucket.bucket);
