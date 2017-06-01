@@ -20,16 +20,18 @@ class Connector extends events.EventEmitter {
     this.version = pckg.version
     this._options = options
 
+    if(typeof options !== 'object') {
+      throw new Error('Missing or invalid options for connector. Expecting Object.');
+    }
+
     if (!this._options.host) {
       throw new Error('Missing parameter \'host\' for couchbase connector.')
     }
 
-    var me = this;
-
-    // console.log('couchbase options: ', this._options);
-
     this._cluster = new couchbase.Cluster(this._options.host);
-    this._bucket = this._cluster.openBucket(this._options.bucketname || 'deepstream', this._options.password);
+    this._bucket = this._cluster.openBucket(this._options.bucket, this._options.password);
+
+   console.log('Connecting with settings: ', this._options)
 
     this._bucket.on('connect', () => {
       process.nextTick(this._ready.bind(this))
@@ -38,22 +40,6 @@ class Connector extends events.EventEmitter {
     this._bucket.on('error', err => {
       this.emit('error', err);
     });
-
-
-
-    // function connectBucket() {    
-    //   me._bucket.bucket.on('error', err => {
-    //     // console.log('Error connecting to bucket: ', me._bucket.bucket);
-    //     me.emit('error', err);
-    //   });
-
-    //   me._bucket.bucket.on('connect', () => {
-    //     // console.log('Connected to the bucket!');
-    //     me._ready();
-    //   });
-    // }
-
-    // setTimeout(connectBucket, 1000);
   }
 
   /**
@@ -68,7 +54,6 @@ class Connector extends events.EventEmitter {
    */
   set(key, value, callback) {
     this._bucket.upsert(key, value, this._onResponse.bind(this, callback));
-    //this._client.set(key, value, this._options.lifetime, this._onResponse.bind(this, callback))
   }
 
   /**
@@ -84,28 +69,17 @@ class Connector extends events.EventEmitter {
   get(key, callback) {
 
     this._bucket.get(key, (err, val) => {
-      if(err)
+      if(err && err.code != 13) // Code 13 means value doesn't exist on server. We don't consider that an error here.
         return callback(err);
 
-      if(val === undefined || val[key] === undefined)
+      if(val === undefined)
         return callback(null, null);
 
-      callback(null, val[key]);
+      if(val && val.value)
+        val = val.value;
+
+      callback(null, val);
     });
-
-/*    this._client.get(key, (err, value) => {
-      if (err) {
-        callback(err)
-        return
-      }
-
-      if (value === undefined) {
-        callback(null, null)
-        return
-      }
-      callback(null, value)
-    })
-*/
   }
 
   /**
@@ -125,7 +99,6 @@ class Connector extends events.EventEmitter {
 
       callback(null);
     });
-//    this._client.del(key, this._onResponse.bind(this, callback))
   }
 
   _ready() {
