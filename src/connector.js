@@ -31,8 +31,6 @@ class Connector extends events.EventEmitter {
     this._cluster = new couchbase.Cluster(this._options.host);
     this._bucket = this._cluster.openBucket(this._options.bucket, this._options.password);
 
-   console.log('Connecting with settings: ', this._options)
-
     this._bucket.on('connect', () => {
       process.nextTick(this._ready.bind(this))
     });
